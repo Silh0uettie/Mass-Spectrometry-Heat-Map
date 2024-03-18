@@ -2,15 +2,25 @@
 import numpy as np
 import pandas as pd
 import os
-#import matplotlib.pyplot as plt
-#import seaborn as sns
-import plotly.graph_objects as go
-#from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
 import pickle
 
 class MSHM:
     def __init__(self, path):
+        """
+        Mass Spect Heat Map (MSHM) plotter
+
+        Consist of the following function:
+            index
+            index_ori
+            set_index
+            mw_range
+            mw_range_ori
+            set_mw_range
+            save_to_file
+            load_from_file
+            pfunction
+        """
         # Set path
         self.path = path
         
@@ -31,20 +41,32 @@ class MSHM:
         
     # Read index from dfs
     def index(self):
+        """
+        return the working index
+        """
         index = self.__dfs['array'].index.to_list()
         return index
     
     # Read range from dfs
     def mw_range(self):
+        """
+        return the working molecular weight range
+        """
         r = [self.__dfs['array'].columns[0],self.__dfs['array'].columns[-1]]
         return  r
     
     # Read index from dfs
     def index_ori(self):
+        """
+        return the orignial index
+        """
         return self.__index_ori
     
     # Read range from dfs
     def mw_range_ori(self):
+        """
+        return the original molecular weight range
+        """
         return self.__range_ori
 
     # This is a function that get all the folder names in the directory.
@@ -112,6 +134,11 @@ class MSHM:
     
     # This is a function to filter and sort samples. 
     def set_index(self,order = None):
+        """
+        Input an 1D array [a, b, c, d .......]
+        and set it as the working index
+        All elements have to be from ori_index
+        """
         # if called by set_mw_range(), use costume order as order.
         if order is None:
             order = self.__index
@@ -135,6 +162,11 @@ class MSHM:
             self.__recursion = False
             
     def set_mw_range(self,r = None):
+        """
+        Input an 1D array [x, y]
+        and set it as the working molecular weight range
+        All elements have to be from mw_range_ori
+        """
         # if called by set_index(), use costume range as range.
         if r is None:
             r = self.__range
@@ -180,14 +212,30 @@ class MSHM:
             self.__recursion = False
 
     def save_to_file(self, file_path):
+        """
+        Input a file path/name
+        Not quite finished but good enough for exporting the database and analyse it on another machine
+        """
         with open(file_path, 'wb') as output_file:
             pickle.dump(self, output_file)
     def load_from_file(file_path):
+        """
+        Input a file path/name
+        Not quite finished but good enough to open the database export by this script from another machine
+        """
         with open(file_path, 'rb') as input_file:
             return pickle.load(input_file)
         
     # This is a function to plot the figure in plotly. 
-    def pfunction(self, title="", color="electric_r"):
+    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True):
+        """
+        The plotter.
+        Has 3 argument: title, color and annotation.
+
+        title = "the title you want"
+        color is black and white by default. Please check plotly documentation in order to change it.
+        annotation = True by default.
+        """
         df = self.__dfs['array']
         pk = self.__dfs['peaks']
         fig = px.imshow(df, color_continuous_scale=color)
@@ -215,33 +263,33 @@ class MSHM:
                     width=1
                 )
             )
-        
-        for i in range(len(df.index)):
-            sample_name = df.index[i]
-            peak = pk.loc[sample_name,:].dropna(axis = 1)
-            for j in range(len(peak.columns)):
-                mass = peak.iloc[0,j].astype(int)
-                intensity = str(peak.iloc[1,j].round(1))+"%"
-                fig.add_annotation(
-                        x=mass,  # x-coordinate where the annotation should be placed
-                        y=i-0.2,
-                        text= f"<span style='letter-spacing: -1px;'><b>{mass:}</b></span>",
-                        showarrow=False,
-                        textangle=25,
-                        font=dict(
-                        color="#4A90E2",
-                        size=9)
-                    )
-                fig.add_annotation(
-                        x=mass,  # x-coordinate where the annotation should be placed
-                        y=i+0.2,
-                        text=f"<span style='letter-spacing: -1px;'><b>{intensity}</b></span>",
-                        showarrow=False,
-                        textangle=25,
-                        font=dict(
-                        color="#ff66cc",
-                        size=9)
-                    )      
+        if annotation == True:
+            for i in range(len(df.index)):
+                sample_name = df.index[i]
+                peak = pk.loc[sample_name,:].dropna(axis = 1)
+                for j in range(len(peak.columns)):
+                    mass = peak.iloc[0,j].astype(int)
+                    intensity = str(peak.iloc[1,j].round(1))+"%"
+                    fig.add_annotation(
+                            x=mass,  # x-coordinate where the annotation should be placed
+                            y=i-0.2,
+                            text= f"<span style='letter-spacing: -1px;'><b>{mass:}</b></span>",
+                            showarrow=False,
+                            textangle=25,
+                            font=dict(
+                            color="#4A90E2",
+                            size=9)
+                        )
+                    fig.add_annotation(
+                            x=mass,  # x-coordinate where the annotation should be placed
+                            y=i+0.2,
+                            text=f"<span style='letter-spacing: -1px;'><b>{intensity}</b></span>",
+                            showarrow=False,
+                            textangle=25,
+                            font=dict(
+                            color="#ff66cc",
+                            size=9)
+                        )      
         fig.update_layout(
             title={
                 'text': f'<b>{title}</b>', # Bold Text
