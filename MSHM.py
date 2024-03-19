@@ -79,8 +79,8 @@ class MSHM:
                 folders.append(item)
         for i in folders:
             parts = i.split('_')
-            prefix = parts[0]
-            number = int(parts[1])
+            prefix = i[:-19]
+            number = int(parts[-2])
             if prefix not in largest_numbers or number > largest_numbers[prefix]:
                 largest_numbers[prefix] = number
         folders = [f"{prefix}_{str(number).zfill(6)}_unidecfiles" for prefix, number in largest_numbers.items()]
