@@ -227,14 +227,15 @@ class MSHM:
             return pickle.load(input_file)
         
     # This is a function to plot the figure in plotly. 
-    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True):
+    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True, deduction = 0):
         """
         The plotter.
-        Has 3 argument: title, color and annotation.
+        Has 4 arguments: title, color, annotation and deduction.
 
         title = "the title you want"
         color is black and white by default. Please check plotly documentation in order to change it.
         annotation = True by default.
+        deduction = 0 by default. You can input your the base line value and annotate the peak by mass adduct.
         """
         df = self.__dfs['array']
         pk = self.__dfs['peaks']
@@ -273,7 +274,7 @@ class MSHM:
                     fig.add_annotation(
                             x=mass,  # x-coordinate where the annotation should be placed
                             y=i-0.2,
-                            text= f"<span style='letter-spacing: -1px;'><b>{mass:}</b></span>",
+                            text= f"<span style='letter-spacing: -1px;'><b>{mass-deduction}</b></span>",
                             showarrow=False,
                             textangle=25,
                             font=dict(
