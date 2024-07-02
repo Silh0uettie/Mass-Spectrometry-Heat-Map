@@ -1,74 +1,32 @@
 # Import all the handy libraries.
-import numpy as np
 import pandas as pd
 import os
 import plotly.express as px
 import pickle
 
+#pd.options.mode.copy_on_write = True
 class MSHM:
     def __init__(self, path):
         """
         Mass Spect Heat Map (MSHM) plotter
 
         Consist of the following function:
-            index
-            index_ori
-            set_index
-            mw_range
-            mw_range_ori
-            set_mw_range
+            alias
+            set_alias
+            working_area
+            set_working_area
+            prep_dfs_for_plotting
             save_to_file
             load_from_file
             pfunction
         """
         # Set path
         self.path = path
-        
+
         # Creat self.__dfs
         self.__dfs = self.__prep_dfs()
-        self.__dfs_ori = self.__dfs
+        self.__dfs_temp = {}
         
-        # Creat __index
-        self.__index = self.index()
-        self.__index_ori = self.__index
-        
-        # Creat __range
-        self.__range = self.mw_range()
-        self.__range_ori = self.__range
-        
-        # recursion guard
-        self.__recursion = False
-        
-    # Read index from dfs
-    def index(self):
-        """
-        return the working index
-        """
-        index = self.__dfs['array'].index.to_list()
-        return index
-    
-    # Read range from dfs
-    def mw_range(self):
-        """
-        return the working molecular weight range
-        """
-        r = [self.__dfs['array'].columns[0],self.__dfs['array'].columns[-1]]
-        return  r
-    
-    # Read index from dfs
-    def index_ori(self):
-        """
-        return the orignial index
-        """
-        return self.__index_ori
-    
-    # Read range from dfs
-    def mw_range_ori(self):
-        """
-        return the original molecular weight range
-        """
-        return self.__range_ori
-
     # This is a function that get all the folder names in the directory.
     def __get_folders(self):
         path = self.path
@@ -109,8 +67,6 @@ class MSHM:
         folders = self.__get_folders()
         # Create a empty dataframe to store data
         array = pd.DataFrame()
-        n_array = pd.DataFrame()
-        n_peak_info = pd.DataFrame()
         # A loop to obtain the peak data from each folder.
         for n in range(len(folders)):
             # Create a hierarchical index.
@@ -129,65 +85,109 @@ class MSHM:
         array = self.__prep_array()
         array.columns = array.columns.astype(int)
         peaks = self.__prep_peaks()
-        self.__dfs = {"array":array,"peaks":peaks}
+        # An extra one-column dataframe with alias.
+        alias = pd.DataFrame(array.index, index = array.index, columns= ['Alias'])
+        # Make a dictionary with working area
+        mwrange= [array.columns[0],array.columns[-1]]
+        aindex = array.index.to_list()
+        working_area = {"mw_limit":mwrange,
+                        "mw_range":mwrange,
+                        "sample_alias":aindex,
+                        "selected_alias":aindex
+                        }
+        # Intergrate everything into a dictionary.
+        self.__dfs = {"array":array,"peaks":peaks,"alias":alias, "working_area":working_area}
         return self.__dfs
     
-    # This is a function to filter and sort samples. 
-    def set_index(self,order = None):
+    # aquire the alias and return as a dictionary.
+    def alias(self):
         """
-        Input an 1D array [a, b, c, d .......]
-        and set it as the working index
-        All elements have to be from ori_index
+        Display sample alias
         """
-        # if called by set_mw_range(), use costume order as order.
-        if order is None:
-            order = self.__index
-            # and will use __dfs as template
-            array= self.__dfs["array"].loc[order,:]
-            peaks= self.__dfs["peaks"].loc[order,:]            
-        # otherwise, use inputed order
-        else:
-            order = order
-            # use original dfs as the template
-            array= self.__dfs_ori["array"].loc[order,:]
-            peaks= self.__dfs_ori["peaks"].loc[order,:]
-        # update the order
-        self.__index = order
-        # update the dfs
-        self.__dfs = {"array":array,"peaks":peaks}
-        # set range.
-        if not self.__recursion:
-            self.__recursion = True
-            self.set_mw_range()
-            self.__recursion = False
-            
-    def set_mw_range(self,r = None):
+        return self.__dfs['alias'].to_dict()['Alias']
+    
+    # Input new alias as a dictionary.
+    def set_alias(self,d):
         """
-        Input an 1D array [x, y]
-        and set it as the working molecular weight range
-        All elements have to be from mw_range_ori
+        Rename sample alias
         """
-        # if called by set_index(), use costume range as range.
-        if r is None:
-            r = self.__range
-            array = self.__dfs["array"]
-            peaks = self.__dfs["peaks"]
-        # otherwise, use inputed order
+        # Pull out the old alias as dictionary
+        d_old = self.alias()
+        # Loop through all the keys in the new dictionary
+        for i in d.keys():
+            # For each key, replace the old value with the new value
+            d_old[i] = d[i]
+        # Turn the dictionary back to a dataframe
+        alias = pd.DataFrame.from_dict(d_old,orient="index", columns=["Alias"])
+        # Update the alias dataframe
+        self.__dfs['alias'] = alias
+        # Update sample_alias
+        self.__dfs["working_area"]["sample_alias"] = alias.iloc[:,0].to_list()
+        # Acquire the old selected alias (a list)
+        selected_alias = self.__dfs["working_area"]["selected_alias"]
+        # Replace the old alias with new ones
+        temp = [
+            alias.iloc[alias.index.get_loc(x), 0]
+            if x in alias.index
+            else x
+            for x in selected_alias
+            ]
+        self.__dfs["working_area"]["selected_alias"] = temp
+        
+    # Get current working area.    
+    def working_area(self):
+        """
+        Display current working area (mass range & selected sample alias)
+        """
+        return self.__dfs["working_area"]
+    
+    # Set current working area.
+    def set_working_area(self,mw_limit = None,sample_name = None):
+        """
+        Set working area (mass range & selected sample alias)
+        """
+        working_area = self.__dfs["working_area"]
+        if isinstance(mw_limit, list):
+            if len(mw_limit) == 2 and all(working_area["mw_limit"][0] <= n <= working_area["mw_limit"][1] for n in mw_limit):
+                working_area['mw_range'] = mw_limit
+            else:
+                print('Input is not a valid list. Ignoring.')
+                pass
         else:
-            r = r
-            # sign the original data to array and peaks
-            array = self.__dfs_ori["array"]
-            peaks = self.__dfs_ori["peaks"]
-
-        # check if r leads between minimun and maximun values.
-        if r[0] < self.__dfs_ori["array"].columns[0]:
-            left = self.__dfs_ori["array"].columns[0]
+            print("Input is not a list. Ignoring.")
+            pass
+        
+        if isinstance(sample_name, list):
+            alias = self.__dfs['alias'].iloc[:,0].to_list()
+            common_elements = [x for x in sample_name if x in alias]
+            working_area["selected_alias"]= common_elements
         else:
-            left = r[0]
-        if r[0] > self.__dfs_ori["array"].columns[-1]:
-            right = self.__dfs_ori["array"].columns[-1]
-        else:
-            right = r[1]
+            print("Input is not a list. Ignoring.")
+            pass       
+        
+        self.__dfs["working_area"] = working_area
+    
+    # Assemble a new dictionay. Has array (with alias as index) and peaks. Both are sliced with working area.
+    def prep_dfs_for_plotting(self, normalisation = True, deduction = 0):
+        """
+        Prepare dataframe used for plotting figures. Can be use to generate the result table.
+        """
+        sample_name = self.__dfs["working_area"]["selected_alias"]
+        mw_range = self.__dfs["working_area"]["mw_range"]
+        
+        
+        array = self.__dfs['array']
+        peaks = self.__dfs['peaks']
+        alias = self.__dfs['alias']
+        
+        array.rename(index = {o:n for o, n in zip(array.index.to_list(), alias.iloc[:,0].to_list())}, inplace = True)
+        peaks.rename(index = {o:n for o, n in zip(peaks.index.get_level_values(0).unique(), alias.iloc[:,0].to_list())}, level=0, inplace = True)
+        
+        array= array.loc[sample_name,:]
+        peaks= peaks.loc[sample_name,:]
+        
+        left = mw_range[0]
+        right = mw_range[1]
         # Set range for 'array'
         array_columns=array.columns[(array.columns >= left) & (array.columns <= right)]
         array = array[array_columns]
@@ -198,18 +198,46 @@ class MSHM:
             peaks_temp_slice = peaks.iloc[i:i+2,:]
             mask = (peaks_temp_slice.iloc[0,:] <= right) & (peaks_temp_slice.iloc[0,:] >= left)
             peaks_temp_slice = peaks_temp_slice.loc[:,mask]
+            # remove column names
             peaks_temp_slice.columns = range(peaks_temp_slice.shape[1])
+            # assemble the df
             peaks_temp =pd.concat([peaks_temp,peaks_temp_slice])
         peaks = peaks_temp
-        # update range
-        self.__range = r
-        # update dfs
-        self.__dfs = {"array":array,"peaks":peaks}
-        # set index
-        if not self.__recursion:
-            self.__recursion = True
-            self.set_index()
-            self.__recursion = False
+        
+        # Picking peaks
+        peaks_temp = pd.DataFrame()
+        if normalisation == True:
+            # list all the sample names into a list.
+            samples_alias = array.index.to_list()
+            # Start a loop to pick peaks
+            for i in samples_alias:
+                peakslice = peaks.loc[[i],:]
+                # Pick whats greater than 10
+                greater = peakslice.loc[:, peakslice.iloc[1,:]>=10]
+                # Pick top 5
+                top = greater.iloc[1].nlargest(5).index
+                peakslice = peakslice[top]
+                sliceindex = peakslice.iloc[0].sort_values().index
+                peakslice = peakslice[sliceindex]
+                # Remove column names
+                peakslice.columns = range(peakslice.shape[1])
+                # Assemble the Dataframe
+                peaks_temp = pd.concat([peaks_temp,peakslice])
+            # Normolising
+            # Sum of select peaks
+            peaks_sum = peaks_temp[1::2].sum(axis=1).to_list()
+            array_temp = array.div(peaks_sum,axis=0)*100
+            peaks_temp[1::2] = peaks_temp[1::2].div(peaks_sum,axis=0)*100
+            # do deduction
+            array_temp.columns = array_temp.columns - deduction
+            peaks_temp[0::2] = peaks_temp[0::2] - deduction
+            # asign to array
+            peaks = peaks_temp
+            array = array_temp
+        else:
+            pass
+        
+        self.__dfs_temp = {"array":array,"peaks":peaks}
 
     def save_to_file(self, file_path):
         """
@@ -217,29 +245,39 @@ class MSHM:
         Not quite finished but good enough for exporting the database and analyse it on another machine
         """
         with open(file_path, 'wb') as output_file:
-            pickle.dump(self, output_file)
-    def load_from_file(file_path):
+            pickle.dump(self.__dfs, output_file)
+    def load_from_file(self, file_path):
         """
         Input a file path/name
         Not quite finished but good enough to open the database export by this script from another machine
         """
         with open(file_path, 'rb') as input_file:
-            return pickle.load(input_file)
+            self.__dfs = pickle.load(input_file)
         
     # This is a function to plot the figure in plotly. 
-    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True, deduction = 0):
+    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True, deduction = 0, normalisation = True):
         """
         The plotter.
-        Has 4 arguments: title, color, annotation and deduction.
+        Has 4 arguments: title, color, annotation, deduction and normalisation.
 
         title = "the title you want"
         color is black and white by default. Please check plotly documentation in order to change it.
         annotation = True by default.
         deduction = 0 by default. You can input your the base line value and annotate the peak by mass adduct.
+        normalisation = True by default. It recalculates the relative peak hight.
         """
-        df = self.__dfs['array']
-        pk = self.__dfs['peaks']
+
+        self.prep_dfs_for_plotting(normalisation = normalisation, deduction = deduction)
+        
+        if deduction == 0:
+            xtitle = 'Molecular Weight (Da)'
+        else:
+            xtitle = 'Molecular Weight Additive (Da)'
+        
+        df = self.__dfs_temp['array']
+        pk = self.__dfs_temp['peaks']
         fig = px.imshow(df, color_continuous_scale=color)
+        
         fig.add_shape(
             type="rect",
             x0=df.columns[0]-0.5,  # Start x-coordinate (adjusted to align with heatmap)
@@ -274,7 +312,7 @@ class MSHM:
                     fig.add_annotation(
                             x=mass,  # x-coordinate where the annotation should be placed
                             y=i-0.2,
-                            text= f"<span style='letter-spacing: -1px;'><b>{mass-deduction}</b></span>",
+                            text= f"<span style='letter-spacing: -1px;'><b>{mass}</b></span>",
                             showarrow=False,
                             textangle=25,
                             font=dict(
@@ -290,13 +328,23 @@ class MSHM:
                             font=dict(
                             color="#ff66cc",
                             size=9)
-                        )      
+                        )    
         fig.update_layout(
+            width= 1200,
+           # width=3000,
+            height= len(df.index)*50+150,
+            margin=dict(
+                l=200,
+                r=100,
+                b=75,
+                t=75
+            ),
+            autosize=False,
             title={
                 'text': f'<b>{title}</b>', # Bold Text
                 'xanchor': 'center',  # Anchor the title at its center
                 'yanchor': 'middle',  # Anchor the title at its middle
-                'y':(len(df.index)*50+100)/(len(df.index)*50+150),  # Put the center of the title 50 pixel away from the figure top border
+                'y':(len(df.index)*50+120)/(len(df.index)*50+150),  # Put the center of the title 50 pixel away from the figure top border
                 'x':0.5,  # Center the title
                 'font': {
                     'size':24,
@@ -310,9 +358,10 @@ class MSHM:
                 linecolor='black',
                 mirror=True,     # Mirror the line to the top
                 title=dict(
-                    text=f'<b>Molecular Weight (Da)</b>',
-                    font=dict(size=16)
-                )
+                    text=xtitle,
+                    font=dict(size=40)
+                ),
+                title_standoff=20
             ),
             yaxis=dict(
                 showline=True,  # Show the y-axis line
@@ -320,17 +369,22 @@ class MSHM:
                 linecolor='black',
                 mirror=True,     # Mirror the line to the right
                 title=dict(
-                    text=f'<b>Samples</b>',
-                    font=dict(size=16)
+                    text='Samples',
+                    font=dict(size=40)
                 )
             ),
-            width= 1200,
-            height= len(df.index)*50+150,
-            margin=dict(
-                l=200,
-                r=100,
-                b=50,
-                t=100
+            coloraxis=dict(
+                cmin=0,
+                cmax=1,
+                colorbar=dict(
+                    tickfont=dict(size=18),
+                    tickvals=[0, 1],  # Define specific tick positions
+                    ticktext=["0%", "100%"]  # Corresponding labels
+                    )
+                )
             )
+        fig.update_layout(
+            xaxis_tickfont=dict(size=25),  # Set the font size for x-axis ticks
+            yaxis_tickfont=dict(size=25)   # Set the font size for y-axis ticks
         )
         return fig
