@@ -26,24 +26,17 @@ class MSHM:
         # Creat self.__dfs
         self.__dfs = self.__prep_dfs()
         self.__dfs_temp = {}
-        
-    # This is a function that get all the folder names in the directory.
+
     def __get_folders(self):
         path = self.path
         folders = []
-        largest_numbers = {}
         for item in os.listdir(path):
             if os.path.isdir(os.path.join(path, item)):
                 folders.append(item)
-        for i in folders:
-            parts = i.split('_')
-            prefix = i[:-19]
-            number = int(parts[-2])
-            if prefix not in largest_numbers or number > largest_numbers[prefix]:
-                largest_numbers[prefix] = number
-        folders = [f"{prefix}_{str(number).zfill(6)}_unidecfiles" for prefix, number in largest_numbers.items()]
         return folders
-    
+        
+        
+        
     # This is a function that generate the array of intensity across mass for all deconvoluted samples. 
     def __prep_array(self):
         # Obtain the folder names, aka "sample names", from the directory.
@@ -52,14 +45,15 @@ class MSHM:
         array = pd.DataFrame()
         for n in range(len(folders)):
             # Create an index.
-            index = [folders[n][:-19]]
+            index = [folders[n]]
             # Read the data from _mass.txt file.
             data = pd.read_table(self.path+folders[n]+'/'+folders[n][:-12]+'_mass.txt',delim_whitespace=True, header=None, index_col=0).transpose().set_axis(index)
             # Concat to the array.
             array =pd.concat([array,data])
             #### End of the loop.
         array = array.divide(array.max(axis=1), axis = 0)
-        return array
+        array = array.sort_index(axis=1)
+        return array 
     
     # This is a function that generate the array of intensity and molecular weight of all peaks.
     def __prep_peaks(self):
@@ -70,7 +64,7 @@ class MSHM:
         # A loop to obtain the peak data from each folder.
         for n in range(len(folders)):
             # Create a hierarchical index.
-            tuples=[(folders[n][:-19], "Mass"), (folders[n][:-19], "Intensity")]
+            tuples=[(folders[n][:-12], "Mass"), (folders[n][:-12], "Intensity")]
             index = pd.MultiIndex.from_tuples(tuples, names=["Sample", "Value"])
             # Read the "*_peaks.dat" file, which containing the "Mass" and "Intensity" data.
             peak_info = pd.read_table(self.path+folders[n]+'/'+folders[n][:-12]+'_peaks.dat', header=None, delim_whitespace=True).transpose().set_axis(index)
@@ -168,7 +162,7 @@ class MSHM:
         self.__dfs["working_area"] = working_area
     
     # Assemble a new dictionay. Has array (with alias as index) and peaks. Both are sliced with working area.
-    def prep_dfs_for_plotting(self, normalisation = True, deduction = 0):
+    def prep_dfs_for_plotting(self, normalisation = True, deduction = 0, rank = 5, threhold = 10):
         """
         Prepare dataframe used for plotting figures. Can be use to generate the result table.
         """
@@ -204,7 +198,7 @@ class MSHM:
             peaks_temp =pd.concat([peaks_temp,peaks_temp_slice])
         peaks = peaks_temp
         
-        # Picking peaks
+        # Picking peaksdata = MSHM("./Trouble shooting/")
         peaks_temp = pd.DataFrame()
         if normalisation == True:
             # list all the sample names into a list.
@@ -212,10 +206,10 @@ class MSHM:
             # Start a loop to pick peaks
             for i in samples_alias:
                 peakslice = peaks.loc[[i],:]
-                # Pick whats greater than 10
-                greater = peakslice.loc[:, peakslice.iloc[1,:]>=10]
-                # Pick top 5
-                top = greater.iloc[1].nlargest(5).index
+                # Pick whats greater than threhold
+                greater = peakslice.loc[:, peakslice.iloc[1,:]>=threhold]
+                # Pick top x
+                top = greater.iloc[1].nlargest(rank).index
                 peakslice = peakslice[top]
                 sliceindex = peakslice.iloc[0].sort_values().index
                 peakslice = peakslice[sliceindex]
@@ -255,7 +249,7 @@ class MSHM:
             self.__dfs = pickle.load(input_file)
         
     # This is a function to plot the figure in plotly. 
-    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True, deduction = 0, normalisation = True):
+    def pfunction(self, title="", color=[(0, "white"),(1, "black")], annotation = True, deduction = 0, normalisation = True, rank = 5, threhold = 10):
         """
         The plotter.
         Has 4 arguments: title, color, annotation, deduction and normalisation.
@@ -267,7 +261,7 @@ class MSHM:
         normalisation = True by default. It recalculates the relative peak hight.
         """
 
-        self.prep_dfs_for_plotting(normalisation = normalisation, deduction = deduction)
+        self.prep_dfs_for_plotting(normalisation = normalisation, deduction = deduction, rank = rank, threhold = threhold)
         
         if deduction == 0:
             xtitle = 'Molecular Weight (Da)'
@@ -359,7 +353,7 @@ class MSHM:
                 mirror=True,     # Mirror the line to the top
                 title=dict(
                     text=xtitle,
-                    font=dict(size=40)
+                    font=dict(size=20)
                 ),
                 title_standoff=20
             ),
@@ -370,7 +364,7 @@ class MSHM:
                 mirror=True,     # Mirror the line to the right
                 title=dict(
                     text='Samples',
-                    font=dict(size=40)
+                    font=dict(size=20)
                 )
             ),
             coloraxis=dict(
@@ -384,7 +378,7 @@ class MSHM:
                 )
             )
         fig.update_layout(
-            xaxis_tickfont=dict(size=25),  # Set the font size for x-axis ticks
-            yaxis_tickfont=dict(size=25)   # Set the font size for y-axis ticks
+            xaxis_tickfont=dict(size=15),  # Set the font size for x-axis ticks
+            yaxis_tickfont=dict(size=15)   # Set the font size for y-axis ticks
         )
         return fig
